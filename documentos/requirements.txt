@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+firebase-admin
+pandas
+openpyxl
+fpdf2

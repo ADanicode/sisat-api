@@ -1,13 +1,6 @@
 fastapi
 uvicorn
-firebase-admin
-pandas
-openpyxl
-python-docx
-fpdf2
-boto3
 python-multipart
 google-generativeai
 pydantic
 python-dotenv
-requests
