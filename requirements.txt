@@ -5,3 +5,5 @@ pandas
 openpyxl
 python-docx
 fpdf2
+boto3
+python-multipart
