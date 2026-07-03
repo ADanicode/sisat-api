@@ -111,6 +111,9 @@ def crear_usuario(payload: UsuarioCreate) -> dict[str, Any]:
 @app.put("/usuarios/{usuario_id}/estado")
 def actualizar_estado_usuario(usuario_id: str, activo: bool = Body(...)) -> dict[str, Any]:
     try:
+        if not usuario_id:
+            raise HTTPException(status_code=400, detail="ID de usuario faltante")
+
         doc_ref = db.collection("usuarios").document(usuario_id)
         snapshot = doc_ref.get()
         if not snapshot.exists:

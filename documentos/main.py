@@ -56,7 +56,9 @@ def aplanar_diccionario(d: Any, parent_key: str = "", sep: str = "_") -> dict[st
 
 
 def obtener_datos(cuestionario_id: str) -> pd.DataFrame:
-    docs = db.collection("registros_campo").where("cuestionario_id", "==", cuestionario_id).stream()
+    docs = db.collection("registros_campo").where(
+        filter=firestore.FieldFilter("cuestionario_id", "==", cuestionario_id)
+    ).stream()
 
     registros_aplanados: list[dict[str, Any]] = []
     for doc in docs:
