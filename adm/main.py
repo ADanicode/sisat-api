@@ -55,7 +55,7 @@ class UsuarioCreate(BaseModel):
 
 
 class UsuarioEstadoUpdate(BaseModel):
-    activo: bool
+    estado_activo: bool
 
 
 class EncuestaEstadoUpdate(BaseModel):
@@ -109,7 +109,7 @@ def crear_usuario(payload: UsuarioCreate) -> dict[str, Any]:
 
 
 @app.put("/usuarios/{usuario_id}/estado")
-def actualizar_estado_usuario(usuario_id: str, activo: bool = Body(...)) -> dict[str, Any]:
+def actualizar_estado_usuario(usuario_id: str, payload: UsuarioEstadoUpdate) -> dict[str, Any]:
     try:
         if not usuario_id:
             raise HTTPException(status_code=400, detail="ID de usuario faltante")
@@ -119,16 +119,16 @@ def actualizar_estado_usuario(usuario_id: str, activo: bool = Body(...)) -> dict
         if not snapshot.exists:
             raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
-        doc_ref.update({"estado_activo": activo})
+        doc_ref.update({"estado_activo": payload.estado_activo})
 
         uid = snapshot.to_dict().get("uid")
         if uid:
-            auth.update_user(uid, disabled=not activo)
+            auth.update_user(uid, disabled=not payload.estado_activo)
 
         return {
             "mensaje": "Estado de usuario actualizado correctamente",
             "usuario_id": usuario_id,
-            "estado_activo": activo,
+            "estado_activo": payload.estado_activo,
         }
     except HTTPException:
         raise
@@ -139,19 +139,19 @@ def actualizar_estado_usuario(usuario_id: str, activo: bool = Body(...)) -> dict
 
 
 @app.put("/encuestas/{cuestionario_id}/estado")
-def actualizar_estado_encuesta(cuestionario_id: str, activo: bool = Body(...)) -> dict[str, Any]:
+def actualizar_estado_encuesta(cuestionario_id: str, payload: EncuestaEstadoUpdate) -> dict[str, Any]:
     try:
         doc_ref = db.collection("cuestionarios_config").document(cuestionario_id)
         snapshot = doc_ref.get()
         if not snapshot.exists:
             raise HTTPException(status_code=404, detail="Cuestionario no encontrado.")
 
-        doc_ref.update({"activo": activo})
+        doc_ref.update({"activo": payload.activo})
 
         return {
             "mensaje": "Estado de encuesta actualizado correctamente",
             "cuestionario_id": cuestionario_id,
-            "activo": activo,
+            "activo": payload.activo,
         }
     except HTTPException:
         raise
