@@ -1,3 +1,5 @@
+import base64
+import json
 import io
 import os
 from typing import Any
@@ -13,11 +15,14 @@ app = FastAPI(title="Microservicio Reportes SISAT")
 
 
 def _init_firebase() -> firestore.Client:
-    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS no esta configurada en el entorno.")
-
     if not firebase_admin._apps:
-        cred = credentials.ApplicationDefault()
+        encoded_creds = os.environ.get("FIREBASE_B64")
+        if not encoded_creds:
+            raise RuntimeError("FIREBASE_B64 no esta configurada.")
+
+        decoded_creds = base64.b64decode(encoded_creds).decode("utf-8")
+        cred_dict = json.loads(decoded_creds)
+        cred = credentials.Certificate(cred_dict)
         firebase_admin.initialize_app(cred)
 
     return firestore.client()
