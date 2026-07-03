@@ -12,6 +12,7 @@ from firebase_admin import credentials, firestore
 from fpdf import FPDF
 
 app = FastAPI(title="Microservicio Reportes SISAT")
+print(app.routes)
 
 
 def _init_firebase() -> firestore.Client:
