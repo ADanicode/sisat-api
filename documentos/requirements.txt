@@ -3,4 +3,5 @@ uvicorn
 firebase-admin
 pandas
 openpyxl
+python-docx
 fpdf2
