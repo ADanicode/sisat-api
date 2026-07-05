@@ -44,8 +44,10 @@ db = _init_firebase()
 
 
 class UsuarioCreate(BaseModel):
+    model_config = {"populate_by_name": True}
+
     nombre: str = Field(min_length=1)
-    email: EmailStr
+    correo: EmailStr = Field(..., alias="email")
     password: str = Field(min_length=6)
     rol_principal: str = Field(min_length=1)
     permisos: list[str] = Field(default_factory=list)
@@ -64,11 +66,11 @@ class EncuestaEstadoUpdate(BaseModel):
 
 @app.post("/usuarios/", status_code=status.HTTP_201_CREATED)
 def crear_usuario(payload: UsuarioCreate) -> dict[str, Any]:
-    usuario_id = payload.email.split("@")[0]
+    usuario_id = payload.correo.split("@")[0]
 
     try:
         usuario_auth = auth.create_user(
-            email=str(payload.email),
+            email=str(payload.correo),
             password=payload.password,
             display_name=payload.nombre,
             disabled=False,
@@ -84,7 +86,7 @@ def crear_usuario(payload: UsuarioCreate) -> dict[str, Any]:
         "usuario_id": usuario_id,
         "uid": usuario_auth.uid,
         "nombre": payload.nombre,
-        "email": str(payload.email),
+        "correo": str(payload.correo),
         "rol_principal": payload.rol_principal,
         "permisos": payload.permisos,
         "asignacion_territorial": payload.asignacion_territorial,
