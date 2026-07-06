@@ -90,7 +90,7 @@ def crear_usuario(payload: UsuarioCreate) -> dict[str, Any]:
         "rol_principal": payload.rol_principal,
         "permisos": payload.permisos,
         "asignacion_territorial": payload.asignacion_territorial,
-        "estado_activo": True,
+        "estado_activo": False,
     }
 
     try:
