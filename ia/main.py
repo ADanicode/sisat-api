@@ -1,9 +1,9 @@
-import os
 import json
-import tempfile
+import os
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
-import google.generativeai as genai
-from pydantic import BaseModel
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # Cargar variables locales
@@ -15,7 +15,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("La variable de entorno GEMINI_API_KEY no está configurada.")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_INSTRUCTION = """
 Eres un sistema experto en extracción de datos de documentos estructurados.
@@ -45,56 +45,32 @@ El formato de salida debe ser ESTRICTAMENTE el siguiente esquema JSON:
 }
 """
 
-model = genai.GenerativeModel(
-    model_name="gemini-flash-lite-latest", # <-- Cambiamos al modelo ligero y rápido
-    system_instruction=SYSTEM_INSTRUCTION,
-    generation_config={"response_mime_type": "application/json"}
-)
 @app.post("/scan-survey/")
 async def scan_survey(file: UploadFile = File(...)):
     allowed_types = ["image/jpeg", "image/png", "application/pdf"]
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Tipo de archivo no soportado. Sube un JPG, PNG o PDF.")
 
-    temp_file_path = None
-    uploaded_gemini_file = None
-
     try:
-        # 1. Guardar el archivo en una ruta temporal del servidor local
-        ext = ".pdf" if file.content_type == "application/pdf" else ".jpg"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
-            temp_file.write(await file.read())
-            temp_file_path = temp_file.name
+        file_bytes = await file.read()
 
-        # 2. Subir el archivo físicamente a la File API de Gemini
-        uploaded_gemini_file = genai.upload_file(path=temp_file_path, mime_type=file.content_type)
-
-        # 3. Consumir la API usando la referencia del archivo subido
         prompt_parts = [
-            uploaded_gemini_file,
-            "Analiza este documento y devuelve el JSON correspondiente."
+            types.Part.from_bytes(data=file_bytes, mime_type=file.content_type),
+            "Analiza este documento y devuelve el JSON correspondiente.",
         ]
-        
-        response = model.generate_content(prompt_parts)
-        
-        # 4. Retornar la data
-        return json.loads(response.text)
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt_parts,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                response_mime_type="application/json",
+            ),
+        )
+
+        return json.loads(response.text or "{}")
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="El modelo no devolvió un JSON válido.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando en Gemini: {str(e)}")
-    
-    finally:
-        # 5. LIMPIEZA ESTRICTA (Crucial para no colapsar el backend ni la capa gratuita)
-        
-        # Eliminar el archivo de los servidores de Google
-        if uploaded_gemini_file:
-            try:
-                genai.delete_file(uploaded_gemini_file.name)
-            except Exception as cleanup_error:
-                print(f"Advertencia: No se pudo borrar el archivo de Gemini: {cleanup_error}")
-                
-        # Eliminar el archivo temporal del disco de tu servidor
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)

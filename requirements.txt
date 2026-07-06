@@ -7,7 +7,7 @@ python-docx
 fpdf2
 boto3
 python-multipart
-google-generativeai
+google-genai
 pydantic
 python-dotenv
 requests
