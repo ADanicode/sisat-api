@@ -70,32 +70,23 @@ async def scan_survey(file: UploadFile = File(...)):
 
     try:
         file_bytes = await file.read()
+        # Convertimos la imagen a base64
         base64_image = base64.b64encode(file_bytes).decode("utf-8")
 
-        # ESTRUCTURA CORREGIDA: Groq espera que 'content' sea una lista de objetos
-        # pero con un formato específico para la imagen
+        # Cambiamos la estructura: el contenido del usuario ahora es un único string
+        # Groq permite enviar la imagen directamente en el prompt si se formatea así:
+        image_data_url = f"data:{file.content_type};base64,{base64_image}"
+        
+        user_content = f"Analiza este documento y devuelve el JSON correspondiente. Imagen: {image_data_url}"
+
         messages = [
             {"role": "system", "content": SYSTEM_INSTRUCTION},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Analiza este documento y devuelve el JSON correspondiente."},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{file.content_type};base64,{base64_image}"
-                        }
-                    }
-                ]
-            }
+            {"role": "user", "content": user_content} # Ahora es un string puro
         ]
 
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
-            # IMPORTANTE: Eliminamos response_format={"type": "json_object"} 
-            # porque a veces causa conflictos con las imágenes en Groq.
-            # En su lugar, forzamos el JSON desde el SYSTEM_INSTRUCTION.
             temperature=0,
         )
 
