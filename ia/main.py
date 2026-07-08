@@ -59,6 +59,7 @@ El formato de salida debe ser ESTRICTAMENTE el siguiente esquema JSON:
     }
   ]
 }
+IMPORTANTE: Responde solo con un objeto JSON válido. No incluyas texto antes ni después del JSON
 """
 
 @app.post("/scan-survey/")
@@ -83,7 +84,7 @@ async def scan_survey(file: UploadFile = File(...)):
         ]
 
         response = client.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0,
