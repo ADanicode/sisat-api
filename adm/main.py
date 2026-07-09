@@ -6,7 +6,7 @@ from typing import Any
 import firebase_admin
 from fastapi import Body, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from firebase_admin import auth, credentials, firestore
+from firebase_admin import auth, credentials, firestore, messaging
 from firebase_admin.exceptions import FirebaseError
 from pydantic import BaseModel, EmailStr, Field
 
@@ -109,6 +109,26 @@ def crear_usuario(payload: UsuarioCreate) -> dict[str, Any]:
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"Error creando documento en Firestore: {exc}") from exc
+
+    try:
+        message = messaging.Message(
+            topic="admin_approvers",
+            notification=messaging.Notification(
+                title="Nuevo Registro SISET",
+                body=f"El usuario {payload.nombre} solicita acceso como {payload.rol_principal}.",
+            ),
+            data={
+                "titulo": "Nuevo Registro SISET",
+                "cuerpo": f"El usuario {payload.nombre} solicita acceso como {payload.rol_principal}.",
+                "usuario_id": usuario_id,
+                "nombre": payload.nombre,
+                "correo": str(payload.correo),
+                "rol_principal": payload.rol_principal,
+            },
+        )
+        messaging.send(message)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error enviando notificación FCM: {exc}") from exc
 
     return {
         "mensaje": "Usuario creado correctamente",
