@@ -11,4 +11,4 @@ google-genai
 pydantic
 python-dotenv
 requests
-anthropic
+anthropic>=0.40.0

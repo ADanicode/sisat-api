@@ -3,15 +3,19 @@ import logging
 import os
 import re
 
-import anthropic
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
+
+try:
+    import anthropic
+    _anthropic_client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+except Exception as e:
+    _anthropic_client = None
+    logging.getLogger(__name__).error(f"anthropic no disponible: {e}")
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ia", tags=["ia"])
-
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 SYSTEM_INSTRUCTION = """Eres un extractor de encuestas. Analiza el documento o imagen y extrae SOLO el título y las preguntas.
 Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adicional ni bloques de código:
@@ -96,11 +100,14 @@ async def scan_survey(file: UploadFile = File(...)):
                 }
             ],
         )
+        if _anthropic_client is None:
+            raise HTTPException(status_code=503, detail="anthropic no instalado en este servidor")
+
         if is_pdf:
             create_kwargs["betas"] = ["pdfs-2024-09-25"]
-            response = client.beta.messages.create(**create_kwargs)
+            response = _anthropic_client.beta.messages.create(**create_kwargs)
         else:
-            response = client.messages.create(**create_kwargs)
+            response = _anthropic_client.messages.create(**create_kwargs)
 
         raw = response.content[0].text.strip()
         # Extraer JSON aunque el modelo agregue texto extra
