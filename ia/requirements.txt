@@ -1,6 +1,5 @@
 fastapi
 uvicorn
+anthropic>=0.40.0
 python-multipart
-openai
 pydantic
-python-dotenv
