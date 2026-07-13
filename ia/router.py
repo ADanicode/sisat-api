@@ -62,7 +62,9 @@ async def scan_survey(file: UploadFile = File(...)):
         file_bytes = await file.read()
         base64_data = base64.standard_b64encode(file_bytes).decode("utf-8")
 
-        if file.content_type == "application/pdf":
+        is_pdf = file.content_type == "application/pdf"
+
+        if is_pdf:
             content_block = {
                 "type": "document",
                 "source": {
@@ -81,8 +83,8 @@ async def scan_survey(file: UploadFile = File(...)):
                 },
             }
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        create_kwargs = dict(
+            model="claude-opus-4-8",
             max_tokens=4096,
             messages=[
                 {
@@ -94,6 +96,11 @@ async def scan_survey(file: UploadFile = File(...)):
                 }
             ],
         )
+        if is_pdf:
+            create_kwargs["betas"] = ["pdfs-2024-09-25"]
+            response = client.beta.messages.create(**create_kwargs)
+        else:
+            response = client.messages.create(**create_kwargs)
 
         raw = response.content[0].text.strip()
         # Extraer JSON aunque el modelo agregue texto extra
