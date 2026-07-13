@@ -1,24 +1,40 @@
 import base64
-import json
 import logging
 import os
+import re
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from openai import OpenAI
-from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
-# Cargar variables locales
-load_dotenv()
+try:
+    import anthropic
+    _client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+except Exception as e:
+    _client = None
+    logging.getLogger(__name__).error(f"anthropic no disponible: {e}")
 
 app = FastAPI(title="Escáner Inteligente de Encuestas")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise RuntimeError("La variable de entorno GROQ_API_KEY no está configurada.")
-
-client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+SYSTEM_INSTRUCTION = """Eres un extractor de encuestas. Analiza el documento o imagen y extrae SOLO el título y las preguntas.
+Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adicional ni bloques de código:
+{
+  "titulo": "nombre de la encuesta",
+  "preguntas": [
+    {
+      "id": "p1",
+      "orden": 1,
+      "enunciado": "texto de la pregunta",
+      "tipo": "CERRADA",
+      "opciones": ["opción 1", "opción 2"]
+    }
+  ]
+}
+Reglas:
+- tipo siempre "CERRADA" o "ABIERTA"
+- Si la pregunta tiene opciones de respuesta, tipo="CERRADA" y llena opciones[]
+- Si es respuesta libre/abierta, tipo="ABIERTA" y opciones=[]
+- Numera los ids como p1, p2, p3..."""
 
 
 class PreguntaSalida(BaseModel):
@@ -26,81 +42,82 @@ class PreguntaSalida(BaseModel):
     orden: int
     enunciado: str
     tipo: str
-    opciones: list[str] = Field(default_factory=list)
+    opciones: list[str]
 
 
 class EncuestaSalida(BaseModel):
     titulo: str
-    preguntas: list[PreguntaSalida] = Field(default_factory=list)
+    preguntas: list[PreguntaSalida]
 
-SYSTEM_INSTRUCTION = """
-Eres un sistema experto en extracción de datos de documentos estructurados.
-Tu tarea es analizar la imagen o PDF de una encuesta en papel y extraer su contenido estrictamente en formato JSON.
 
-Reglas de extracción:
-1. Identifica el título principal de la encuesta.
-2. Extrae cada pregunta. Asigna un ID único ("p1", "p2", etc.) y un número de orden secuencial.
-3. Determina el tipo de pregunta:
-   - "CERRADA": Si tiene opciones múltiples de selección.
-   - "ABIERTA": Si tiene líneas en blanco o espacio para que el usuario escriba texto libre.
-4. Si es "CERRADA", extrae todas las opciones disponibles en un arreglo de strings. Si es "ABIERTA", el arreglo de opciones debe estar vacío [].
-5. Corrige errores ortográficos menores generados por el escaneo, pero mantén la intención original de la pregunta.
+@app.get("/")
+async def root():
+    return {"status": "ok", "modulo": "ia"}
 
-El formato de salida debe ser ESTRICTAMENTE el siguiente esquema JSON:
-{
-  "titulo": "Título de la encuesta",
-  "preguntas": [
-    {
-      "id": "p1",
-      "orden": 1,
-      "enunciado": "¿Cuál es su edad?",
-      "tipo": "CERRADA",
-      "opciones": ["18-25", "26-35", "36+"]
-    }
-  ]
-}
-IMPORTANTE: Responde solo con un objeto JSON válido. No incluyas texto antes ni después del JSON
-"""
 
 @app.post("/scan-survey/")
 async def scan_survey(file: UploadFile = File(...)):
+    if _client is None:
+        raise HTTPException(status_code=503, detail="anthropic no instalado en este servidor")
+
     allowed_types = ["image/jpeg", "image/png", "application/pdf"]
     if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Tipo de archivo no soportado. Sube un JPG, PNG o PDF.")
+        raise HTTPException(status_code=400, detail="Solo se aceptan JPG, PNG o PDF.")
 
     try:
         file_bytes = await file.read()
-        # Convertimos la imagen a base64
-        base64_image = base64.b64encode(file_bytes).decode("utf-8")
+        base64_data = base64.standard_b64encode(file_bytes).decode("utf-8")
+        is_pdf = file.content_type == "application/pdf"
 
-        # Cambiamos la estructura: el contenido del usuario ahora es un único string
-        # Groq permite enviar la imagen directamente en el prompt si se formatea así:
-        image_data_url = f"data:{file.content_type};base64,{base64_image}"
-        
-        user_content = f"Analiza este documento y devuelve el JSON correspondiente. Imagen: {image_data_url}"
+        if is_pdf:
+            content_block = {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": base64_data,
+                },
+            }
+        else:
+            content_block = {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": file.content_type,
+                    "data": base64_data,
+                },
+            }
 
-        messages = [
-            {"role": "system", "content": SYSTEM_INSTRUCTION},
-            {"role": "user", "content": user_content} # Ahora es un string puro
-        ]
-
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=messages,
-            temperature=0,
+        create_kwargs = dict(
+            model="claude-opus-4-8",
+            max_tokens=4096,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        content_block,
+                        {"type": "text", "text": SYSTEM_INSTRUCTION},
+                    ],
+                }
+            ],
         )
 
-        response_content = response.choices[0].message.content if response.choices else None
-        if not response_content:
-            raise HTTPException(status_code=502, detail="Groq no devolvió contenido.")
+        if is_pdf:
+            create_kwargs["betas"] = ["pdfs-2024-09-25"]
+            response = _client.beta.messages.create(**create_kwargs)
+        else:
+            response = _client.messages.create(**create_kwargs)
 
-        encuesta = EncuestaSalida.model_validate_json(response_content)
+        raw = response.content[0].text.strip()
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if not match:
+            raise HTTPException(status_code=502, detail="Claude no devolvió JSON válido.")
+
+        encuesta = EncuestaSalida.model_validate_json(match.group())
         return encuesta.model_dump(mode="json")
 
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="El modelo no devolvió un JSON válido.")
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Error procesando documento con Groq")
-        raise HTTPException(status_code=500, detail=f"Error procesando en Groq: {str(e)}")
+        logger.exception("Error procesando documento con Claude")
+        raise HTTPException(status_code=500, detail=str(e))
