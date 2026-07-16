@@ -128,17 +128,28 @@ def reporte_excel(cuestionario_id: str) -> StreamingResponse:
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         # Hoja 1: Resumen general
+        municipios_lista = df["municipio"].dropna().unique().tolist() if "municipio" in df.columns else []
+        municipios_lista = [m for m in municipios_lista if m and str(m) != "N/D"]
+        secciones_lista = df["seccion"].dropna().unique().tolist() if "seccion" in df.columns else []
+        secciones_lista = [s for s in secciones_lista if s and str(s) != "N/D"]
+
         resumen_data = {
             "Metrica": [
                 "Cuestionario",
                 "Total Encuestas",
                 "Total Variables",
+                "Municipios",
+                "Secciones",
+                "Encuestadores",
                 "Fecha de Generacion",
             ],
             "Valor": [
                 nombre_cuestionario,
                 len(df),
                 len(df.columns),
+                ", ".join(str(m) for m in sorted(municipios_lista)) if municipios_lista else "N/D",
+                ", ".join(str(s) for s in sorted(secciones_lista)) if secciones_lista else "N/D",
+                df["usuario_id"].nunique() if "usuario_id" in df.columns else "N/D",
                 datetime.now().strftime("%Y-%m-%d %H:%M"),
             ],
         }
@@ -173,6 +184,21 @@ def reporte_excel(cuestionario_id: str) -> StreamingResponse:
         )]
         if demo_cols:
             df[demo_cols].to_excel(writer, sheet_name="Demograficos", index=False)
+
+        # Hoja 5: Por Municipio
+        if "municipio" in df.columns:
+            conteo_muni = df["municipio"].value_counts().reset_index()
+            conteo_muni.columns = ["Municipio", "Encuestas"]
+            total_m = int(conteo_muni["Encuestas"].sum())
+            if total_m > 0:
+                conteo_muni["Porcentaje"] = (conteo_muni["Encuestas"] / total_m * 100).round(1)
+            conteo_muni.to_excel(writer, sheet_name="Por Municipio", index=False)
+
+        # Hoja 6: Por Encuestador
+        if "usuario_id" in df.columns:
+            conteo_enc = df["usuario_id"].value_counts().reset_index()
+            conteo_enc.columns = ["Encuestador", "Encuestas"]
+            conteo_enc.to_excel(writer, sheet_name="Por Encuestador", index=False)
 
     output.seek(0)
     safe_name = nombre_cuestionario.replace('"', '').replace("'", "")[:50]
@@ -260,6 +286,63 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
             pdf.cell(0, 8, "Edades", new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", "", 10)
             pdf.cell(0, 6, f"Promedio: {edades.mean():.1f}  |  Min: {int(edades.min())}  |  Max: {int(edades.max())}", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(4)
+
+    # --- Por Municipio ---
+    if "municipio" in df.columns:
+        conteo_muni = df["municipio"].value_counts()
+        if not conteo_muni.empty:
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(0, 8, "Encuestas por Municipio", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 10)
+            total_m = conteo_muni.sum()
+            with pdf.table(col_widths=(50, 20, 20), text_align="CENTER") as table:
+                header = table.row()
+                header.cell("Municipio")
+                header.cell("Total")
+                header.cell("Porcentaje")
+                for muni, n in conteo_muni.items():
+                    row = table.row()
+                    row.cell(str(muni)[:40])
+                    row.cell(str(int(n)))
+                    row.cell(f"{n / total_m * 100:.1f}%")
+            pdf.ln(4)
+
+    # --- Por Seccion ---
+    if "seccion" in df.columns:
+        conteo_sec = df["seccion"].value_counts()
+        if not conteo_sec.empty and len(conteo_sec) <= 30:
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(0, 8, "Encuestas por Seccion", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 10)
+            total_s = conteo_sec.sum()
+            with pdf.table(col_widths=(50, 20, 20), text_align="CENTER") as table:
+                header = table.row()
+                header.cell("Seccion")
+                header.cell("Total")
+                header.cell("Porcentaje")
+                for sec, n in conteo_sec.items():
+                    row = table.row()
+                    row.cell(str(sec))
+                    row.cell(str(int(n)))
+                    row.cell(f"{n / total_s * 100:.1f}%")
+            pdf.ln(4)
+
+    # --- Por Encuestador ---
+    if "usuario_id" in df.columns:
+        conteo_enc = df["usuario_id"].value_counts()
+        if not conteo_enc.empty:
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(0, 8, "Encuestas por Encuestador", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 10)
+            with pdf.table(col_widths=(60, 20), text_align="CENTER") as table:
+                header = table.row()
+                header.cell("Encuestador")
+                header.cell("Total")
+                for enc, n in conteo_enc.items():
+                    row = table.row()
+                    row.cell(str(enc)[:40])
+                    row.cell(str(int(n)))
             pdf.ln(4)
 
     # --- Frecuencias de todas las preguntas ---
