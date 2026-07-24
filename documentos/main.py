@@ -127,12 +127,17 @@ def columnas_respuestas(df: pd.DataFrame) -> list[str]:
 
 
 def renombrar_columnas_respuestas(cols: list[str], preguntas: dict[str, str]) -> dict[str, str]:
-    """Mapea columnas aplanadas como 'respuestas_p1' a texto legible."""
+    """Mapea columnas aplanadas como 'respuestas_p1' a texto legible.
+    Para matrices, las claves tienen formato 'respuestas_pregunta|rubro'."""
     mapping = {}
     for col in cols:
         preg_id = col.replace("respuestas_", "", 1)
-        texto = preguntas.get(preg_id, preg_id)
-        mapping[col] = texto
+        if "|" in preg_id:
+            parts = preg_id.split("|", 1)
+            mapping[col] = f"{parts[0]} - {parts[1]}"
+        else:
+            texto = preguntas.get(preg_id, preg_id)
+            mapping[col] = texto
     return mapping
 
 
