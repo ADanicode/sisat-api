@@ -15,6 +15,30 @@ from fpdf import FPDF
 app = FastAPI(title="Microservicio Reportes SISAT")
 
 
+def sanitizar_texto(texto: str) -> str:
+    """Reemplaza caracteres Unicode que no soporta latin-1 (Helvetica)."""
+    reemplazos = {
+        "—": "-",  # em dash
+        "–": "-",  # en dash
+        "‘": "'",  # left single quote
+        "’": "'",  # right single quote
+        "“": '"',  # left double quote
+        "”": '"',  # right double quote
+        "…": "...",  # ellipsis
+        "´": "'",  # acute accent
+        "¿": "?",  # inverted question mark — keep as ?
+        " ": " ",  # non-breaking space
+    }
+    for char, reemplazo in reemplazos.items():
+        texto = texto.replace(char, reemplazo)
+    # Fallback: reemplazar cualquier caracter fuera de latin-1
+    try:
+        texto.encode("latin-1")
+    except UnicodeEncodeError:
+        texto = texto.encode("latin-1", errors="replace").decode("latin-1")
+    return texto
+
+
 def _init_firebase() -> firestore.Client:
     if not firebase_admin._apps:
         encoded_creds = os.environ.get("FIREBASE_B64")
@@ -254,7 +278,7 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
 
     # --- Info general ---
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, f"Cuestionario: {nombre_cuestionario}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, sanitizar_texto(f"Cuestionario: {nombre_cuestionario}"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 7, f"Total Encuestas: {len(df)}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 7, f"Total Variables: {len(df.columns)}", new_x="LMARGIN", new_y="NEXT")
@@ -274,7 +298,7 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
             header.cell("Porcentaje")
             for sexo, n in conteo_sexo.items():
                 row = table.row()
-                row.cell(str(sexo))
+                row.cell(sanitizar_texto(str(sexo)))
                 row.cell(str(int(n)))
                 row.cell(f"{n / total_sexo * 100:.1f}%")
         pdf.ln(4)
@@ -303,7 +327,7 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
                 header.cell("Porcentaje")
                 for muni, n in conteo_muni.items():
                     row = table.row()
-                    row.cell(str(muni)[:40])
+                    row.cell(sanitizar_texto(str(muni)[:40]))
                     row.cell(str(int(n)))
                     row.cell(f"{n / total_m * 100:.1f}%")
             pdf.ln(4)
@@ -323,7 +347,7 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
                 header.cell("Porcentaje")
                 for sec, n in conteo_sec.items():
                     row = table.row()
-                    row.cell(str(sec))
+                    row.cell(sanitizar_texto(str(sec)))
                     row.cell(str(int(n)))
                     row.cell(f"{n / total_s * 100:.1f}%")
             pdf.ln(4)
@@ -341,7 +365,7 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
                 header.cell("Total")
                 for enc, n in conteo_enc.items():
                     row = table.row()
-                    row.cell(str(enc)[:40])
+                    row.cell(sanitizar_texto(str(enc)[:40]))
                     row.cell(str(int(n)))
             pdf.ln(4)
 
@@ -362,7 +386,7 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
             texto_display = texto if len(texto) <= 80 else texto[:77] + "..."
 
             pdf.set_font("Helvetica", "B", 10)
-            pdf.multi_cell(0, 6, texto_display, new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(0, 6, sanitizar_texto(texto_display), new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", "", 9)
 
             with pdf.table(col_widths=(60, 15, 15), text_align="CENTER") as table:
@@ -375,7 +399,7 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
                     resp_text = str(r["Respuesta"])
                     if len(resp_text) > 40:
                         resp_text = resp_text[:37] + "..."
-                    data_row.cell(resp_text)
+                    data_row.cell(sanitizar_texto(resp_text))
                     data_row.cell(str(int(r["Frecuencia"])))
                     pct = r["Frecuencia"] / total * 100 if total > 0 else 0
                     data_row.cell(f"{pct:.1f}%")
