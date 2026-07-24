@@ -37,6 +37,8 @@ Reglas:
 - Si la pregunta tiene opciones de respuesta, tipo="CERRADA" y llena opciones[]
 - Si es respuesta libre/abierta, tipo="ABIERTA" y opciones=[]
 - Si la pregunta es una TABLA o MATRIZ donde se evaluan varios rubros/conceptos/temas en una escala numerica (ej: "Califique del 0 al 10 los siguientes rubros"), tipo="MATRIZ", rubros=["rubro1","rubro2",...] y escala_max=el valor maximo de la escala (ej: 10). En este caso opciones=[]
+- Si la pregunta es una TABLA donde se evaluan varios rubros/personas/conceptos con opciones NO numericas (ej: "Digame si conoce a las siguientes personas: Si/No"), tipo="MATRIZ", rubros=["persona1","persona2",...], opciones=["Si","No"] y escala_max=0
+- IMPORTANTE: Una pregunta simple con opciones Si/No (sin tabla ni rubros) es tipo="CERRADA" con opciones=["Si","No"], NO es MATRIZ
 - Para preguntas NO matriz, rubros=[] y escala_max=10
 - Numera los ids como p1, p2, p3...
 - No uses caracteres especiales como em-dash, usa guion normal"""
