@@ -16,8 +16,8 @@ except Exception as e:
 app = FastAPI(title="Escáner Inteligente de Encuestas")
 logger = logging.getLogger(__name__)
 
-SYSTEM_INSTRUCTION = """Eres un extractor de encuestas. Analiza el documento o imagen y extrae SOLO el título y las preguntas.
-Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adicional ni bloques de código:
+SYSTEM_INSTRUCTION = """Eres un extractor de encuestas. Analiza el documento o imagen y extrae SOLO el titulo y las preguntas.
+Devuelve UNICAMENTE un JSON valido con esta estructura exacta, sin texto adicional ni bloques de codigo:
 {
   "titulo": "nombre de la encuesta",
   "preguntas": [
@@ -26,15 +26,20 @@ Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adici
       "orden": 1,
       "enunciado": "texto de la pregunta",
       "tipo": "CERRADA",
-      "opciones": ["opción 1", "opción 2"]
+      "opciones": ["opcion 1", "opcion 2"],
+      "rubros": [],
+      "escala_max": 10
     }
   ]
 }
 Reglas:
-- tipo siempre "CERRADA" o "ABIERTA"
+- tipo puede ser "CERRADA", "ABIERTA" o "MATRIZ"
 - Si la pregunta tiene opciones de respuesta, tipo="CERRADA" y llena opciones[]
 - Si es respuesta libre/abierta, tipo="ABIERTA" y opciones=[]
-- Numera los ids como p1, p2, p3..."""
+- Si la pregunta es una TABLA o MATRIZ donde se evaluan varios rubros/conceptos/temas en una escala numerica (ej: "Califique del 0 al 10 los siguientes rubros"), tipo="MATRIZ", rubros=["rubro1","rubro2",...] y escala_max=el valor maximo de la escala (ej: 10). En este caso opciones=[]
+- Para preguntas NO matriz, rubros=[] y escala_max=10
+- Numera los ids como p1, p2, p3...
+- No uses caracteres especiales como em-dash, usa guion normal"""
 
 
 class PreguntaSalida(BaseModel):
@@ -42,7 +47,9 @@ class PreguntaSalida(BaseModel):
     orden: int
     enunciado: str
     tipo: str
-    opciones: list[str]
+    opciones: list[str] = []
+    rubros: list[str] = []
+    escala_max: int = 10
 
 
 class EncuestaSalida(BaseModel):
