@@ -225,7 +225,8 @@ def reporte_excel(cuestionario_id: str) -> StreamingResponse:
             conteo_enc.to_excel(writer, sheet_name="Por Encuestador", index=False)
 
     output.seek(0)
-    safe_name = nombre_cuestionario.replace('"', '').replace("'", "")[:50]
+    safe_name = sanitizar_texto(nombre_cuestionario).replace('"', '').replace("'", "")
+    safe_name = safe_name.encode("ascii", errors="replace").decode("ascii")[:50]
     headers = {
         "Content-Disposition": f'attachment; filename="Reporte_{safe_name}.xlsx"'
     }
@@ -409,7 +410,8 @@ def reporte_pdf(cuestionario_id: str) -> StreamingResponse:
     pdf_bytes = bytes(pdf.output())
     output = io.BytesIO(pdf_bytes)
 
-    safe_name = nombre_cuestionario.replace('"', '').replace("'", "")[:50]
+    safe_name = sanitizar_texto(nombre_cuestionario).replace('"', '').replace("'", "")
+    safe_name = safe_name.encode("ascii", errors="replace").decode("ascii")[:50]
     headers = {
         "Content-Disposition": f'attachment; filename="Reporte_{safe_name}.pdf"'
     }
