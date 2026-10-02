@@ -41,7 +41,8 @@ Reglas:
 - IMPORTANTE: Una pregunta simple con opciones Si/No (sin tabla ni rubros) es tipo="CERRADA" con opciones=["Si","No"], NO es MATRIZ
 - Para preguntas NO matriz, rubros=[] y escala_max=10
 - Numera los ids como p1, p2, p3...
-- No uses caracteres especiales como em-dash, usa guion normal"""
+- No uses caracteres especiales como em-dash, usa guion normal
+- IMPORTANTE: Asegurate de cerrar correctamente TODOS los corchetes y llaves del JSON. El JSON debe ser valido y completo."""
 
 
 class PreguntaSalida(BaseModel):
@@ -62,6 +63,21 @@ class EncuestaSalida(BaseModel):
 @app.get("/")
 async def root():
     return {"status": "ok", "modulo": "ia"}
+
+
+def _try_fix_truncated_json(raw: str) -> str | None:
+    """Intenta reparar JSON truncado cerrando corchetes/llaves faltantes."""
+    match = re.search(r'\{', raw)
+    if not match:
+        return None
+    json_str = raw[match.start():]
+    open_braces = json_str.count('{') - json_str.count('}')
+    open_brackets = json_str.count('[') - json_str.count(']')
+    if open_braces <= 0 and open_brackets <= 0:
+        return None
+    json_str = json_str.rstrip().rstrip(',')
+    json_str += ']' * open_brackets + '}' * open_braces
+    return json_str
 
 
 @app.post("/scan-survey/")
@@ -97,9 +113,9 @@ async def scan_survey(file: UploadFile = File(...)):
                 },
             }
 
-        create_kwargs = dict(
-            model="claude-opus-4-8",
-            max_tokens=4096,
+        response = _client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=16384,
             messages=[
                 {
                     "role": "user",
@@ -111,19 +127,27 @@ async def scan_survey(file: UploadFile = File(...)):
             ],
         )
 
-        if is_pdf:
-            create_kwargs["betas"] = ["pdfs-2024-09-25"]
-            response = _client.beta.messages.create(**create_kwargs)
-        else:
-            response = _client.messages.create(**create_kwargs)
-
         raw = response.content[0].text.strip()
         match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if not match:
-            raise HTTPException(status_code=502, detail="Claude no devolvió JSON válido.")
 
-        encuesta = EncuestaSalida.model_validate_json(match.group())
-        return encuesta.model_dump(mode="json")
+        if match:
+            try:
+                encuesta = EncuestaSalida.model_validate_json(match.group())
+                return encuesta.model_dump(mode="json")
+            except Exception:
+                pass
+
+        # Si el JSON está truncado, intentar reparar
+        fixed = _try_fix_truncated_json(raw)
+        if fixed:
+            try:
+                encuesta = EncuestaSalida.model_validate_json(fixed)
+                logger.warning("JSON truncado reparado exitosamente")
+                return encuesta.model_dump(mode="json")
+            except Exception:
+                pass
+
+        raise HTTPException(status_code=502, detail="Claude no devolvió JSON válido.")
 
     except HTTPException:
         raise
